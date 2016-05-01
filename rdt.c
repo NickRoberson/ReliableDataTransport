@@ -1,5 +1,6 @@
 #include <stdio.h>
-#include <stdlib.h>        /* Added for gcc. JJW 01/14/14 */
+#include <stdlib.h>   
+#include <string.h>       /* Added for gcc. JJW 01/14/14 */
 
 /*******************************************************************
  ALTERNATING BIT AND GO-BACK-N NETWORK EMULATOR: VERSION 1.1  J.F.Kurose
@@ -35,21 +36,37 @@ struct pkt {
   char payload[DATA_LENGTH];
 };
 
-
+void starttimer(int AorB, float increment);
+void stoptimer(int AorB);
+void tolayer5(int AorB, char* datasent);
+void tolayer3(int AorB, struct pkt packet);
 /********* STUDENTS WRITE THE NEXT SEVEN ROUTINES *********/
 
+int expectedAck = 0;
 
-int calculateChecksum(int data[]){
+// should return true if the acknum on the packet matches the expected acknum
+_Bool isAck(struct pkt packet, int ackNum){
+
+  return (packet.acknum == ackNum);
+
+}
+
+int calculateChecksum(char data[]){
+
   int checksumVal  =  0;
-  for (int i = 0; i < DATA_LENGTH; i++){
-    checksumVal = data[i] + checksumVal;
+
+  int i;
+  for (i = 0; i < DATA_LENGTH; i++){
+    checksumVal =  (int)data[i] + checksumVal;
   }
 
   return checksumVal;
 }
 
-bool isCorrupt(int checksum, int data[]){
-  return (checksum != calculateChecksum(int data[]));
+_Bool isCorrupt(int checksum, char data[]){
+
+  return (checksum != calculateChecksum(data));
+  
 }
 
 
@@ -58,10 +75,10 @@ void A_output(struct msg message) {
 
   struct pkt pktToSend;
 
+  pktToSend.acknum = expectedAck; //generate ack number
   pktToSend.seqnum = 0; //generate sequence number
-  pktToSend.acknum = 0; //generate ack number
   pktToSend.checksum = calculateChecksum(message.data);
-  pktToSend.payload = message.data;
+  memcpy(pktToSend.payload,message.data, sizeof(pktToSend.payload)); // could be +1
 
   //send packet
   tolayer3(0, pktToSend);
@@ -72,12 +89,11 @@ void A_output(struct msg message) {
 /* called from layer 3, when a packet arrives for layer 4 */
 void A_input(struct pkt packet) {
 
-  //verify ack number
-  if(!isCorrupt() && isAck(packet, expectedAck)){
-    A_timerinterrupt()
-
-    //change ecpected ack number
+  if(!isCorrupt(calculateChecksum(packet.payload),packet.payload) && isAck(packet,expectedAck)){
+    stoptimer(0);
+    expectedAck = 1 - expectedAck;
   }
+  
 }
 
 /* called when A's timer goes off */
@@ -96,7 +112,14 @@ void A_init() {
 
 /* called from layer 3, when a packet arrives for layer 4 at B*/
 void B_input(struct pkt packet) {
+  //verify ack number
+  if(!isCorrupt(calculateChecksum(packet.payload),packet.payload)){
 
+    tolayer5(1, packet.payload); // to an upper layer? Layer 5?
+    A_timerinterrupt();
+
+  }
+  else{}
 }
 
 /* called when B's timer goes off */
@@ -104,7 +127,7 @@ void B_timerinterrupt() {
   stoptimer(1);
 }
 
-/* the following rouytine will be called once (only) before any other */
+/* the following routine will be called once (only) before any other */
 /* entity B routines are called. You can use it to do any initialization */
 void B_init() {
 
@@ -188,16 +211,16 @@ int main() {
            printf("\nEVENT time: %f,",eventptr->evtime);
            printf("  type: %d",eventptr->evtype);
            if (eventptr->evtype==0)
-	       printf(", timerinterrupt  ");
+         printf(", timerinterrupt  ");
              else if (eventptr->evtype==1)
                printf(", fromlayer5 ");
              else
-	     printf(", fromlayer3 ");
+       printf(", fromlayer3 ");
            printf(" entity: %d\n",eventptr->eventity);
            }
         time = eventptr->evtime;        /* update time to next event time */
         if (nsim==nsimmax)
-	  break;                        /* all done with simulation */
+    break;                        /* all done with simulation */
         if (eventptr->evtype == FROM_LAYER5 ) {
             generate_next_arrival();   /* set up future arrival */
             /* fill in msg to give with string of same letter */    
@@ -209,7 +232,7 @@ int main() {
                  for (i=0; i<DATA_LENGTH; i++) 
                   printf("%c", msg2give.data[i]);
                printf("\n");
-	     }
+       }
             nsim++;
             if (eventptr->eventity == A) 
                A_output(msg2give);  
@@ -220,20 +243,20 @@ int main() {
             pkt2give.checksum = eventptr->pktptr->checksum;
             for (i=0; i<DATA_LENGTH; i++)  
                 pkt2give.payload[i] = eventptr->pktptr->payload[i];
-	    if (eventptr->eventity ==A)      /* deliver packet by calling */
-   	       A_input(pkt2give);            /* appropriate entity */
+      if (eventptr->eventity ==A)      /* deliver packet by calling */
+           A_input(pkt2give);            /* appropriate entity */
             else
-   	       B_input(pkt2give);
-	    free(eventptr->pktptr);          /* free the memory for packet */
+           B_input(pkt2give);
+      free(eventptr->pktptr);          /* free the memory for packet */
             }
           else if (eventptr->evtype ==  TIMER_INTERRUPT) {
             if (eventptr->eventity == A) 
-	       A_timerinterrupt();
+         A_timerinterrupt();
              else
-	       B_timerinterrupt();
+         B_timerinterrupt();
              }
           else  {
-	     printf("INTERNAL PANIC: unknown event type \n");
+       printf("INTERNAL PANIC: unknown event type \n");
              }
         free(eventptr);
         }
@@ -437,7 +460,7 @@ void tolayer3(int AorB, struct pkt packet) { /* A or B is trying to stop timer *
  if (jimsrand() < lossprob)  {
       nlost++;
       if (TRACE>0)    
-	printf("          TOLAYER3: packet being lost\n");
+  printf("          TOLAYER3: packet being lost\n");
       return;
     }  
 
@@ -451,7 +474,7 @@ void tolayer3(int AorB, struct pkt packet) { /* A or B is trying to stop timer *
     mypktptr->payload[i] = packet.payload[i];
  if (TRACE>2)  {
    printf("          TOLAYER3: seq: %d, ack %d, check: %d ", mypktptr->seqnum,
-	  mypktptr->acknum,  mypktptr->checksum);
+    mypktptr->acknum,  mypktptr->checksum);
     for (i=0; i<DATA_LENGTH; i++)
         printf("%c",mypktptr->payload[i]);
     printf("\n");
@@ -485,7 +508,7 @@ void tolayer3(int AorB, struct pkt packet) { /* A or B is trying to stop timer *
       else
        mypktptr->acknum = 999999;
     if (TRACE>0)    
-	printf("          TOLAYER3: packet being corrupted\n");
+  printf("          TOLAYER3: packet being corrupted\n");
     }  
 
   if (TRACE>2)  
